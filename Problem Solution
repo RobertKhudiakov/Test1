@@ -1,0 +1,76 @@
+python
+import asyncio
+from datetime import datetime, timedelta
+from loguru import logger
+from pyrogram import Client
+from pyrogram.errors import FloodWait
+from sqlalchemy import create_engine, Column, Integer, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+
+Base = declarative_base()
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True)
+    registration_date = Column(DateTime, default=datetime.now)
+
+engine = create_engine("postgresql+asyncpg://username:password@localhost:5432/database")
+Session = sessionmaker(bind=engine)
+Base.metadata.create_all(engine)
+
+app = Client("my_account")
+
+@app.on_message()
+async def send_message(client, message):
+    try:
+        await client.send_message("recipient_username", "Hello, world!")
+        logger.success("Message sent successfully")
+        
+        # Логирование успешной отправки сообщения
+        session = Session()
+        user = User()
+        session.add(user)
+        session.commit()
+        session.close()
+        
+    except FloodWait as e:
+        # Обработка ошибки PeerFlood
+        logger.error(f"Failed to send message: FloodWait {e.x} seconds")
+
+async def count_users_today():
+    while True:
+        current_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Запрос количества пользователей, зарегистрированных сегодня
+        session = Session()
+        user_count = session.query(User).filter(User.registration_date >= current_date).count()
+        session.close()
+        
+        logger.info(f"Number of users registered today: {user_count}")
+        
+        await asyncio.sleep(24 * 60 * 60) # Ожидание одного дня
+
+async def main():
+    await asyncio.gather(
+        app.start(),
+        count_users_today()
+    )
+
+loop = asyncio.get_event_loop()
+try:
+    loop.run_until_complete(main())
+except KeyboardInterrupt:
+    pass
+finally:
+    loop.run_until_complete(app.stop())
+    loop.close()
+
+
+В этом примере я использовал SQLAlchemy для работы с базой данных, асинхронную версию PostgreSQL (asyncpg) в качестве драйвера БД, Pyrogram для взаимодействия с Telegram API и Loguru для логирования. 
+
+После настройки базы данных и учетных данных для Telegram API, необходимо выполнить установку всех необходимых зависимостей и запустить скрипт. 
+
+Он будет отправлять сообщение "Hello, world!" на заданное имя пользователя в Telegram и логировать каждую успешную отправку сообщения, а также подсчитывать количество зарегистрированных пользователей за текущий день и выводить эту информацию в лог. Может потребоваться настроить конфигурацию базы данных и параметры подключения к Telegram API в соответствии с вашими настройками.
+
+Не забудьте заменить "username", "password", "localhost", "database", "recipient_username" и "my_account" на свои реальные значения. Также у вас должна быть активная учетная запись Telegram для работы скрипта.
